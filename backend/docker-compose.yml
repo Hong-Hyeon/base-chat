@@ -30,6 +30,8 @@ services:
       - PYTHONPATH=/app
       - LLM_AGENT_URL=http://llm-agent:8001
       - MCP_SERVER_URL=http://mcp-server:8002
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
       - DEBUG=true
     networks:
       - stubichat_network
@@ -58,6 +60,7 @@ services:
       - PYTHONPATH=/app
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - REDIS_URL=${REDIS_URL}
       - DEBUG=true
     networks:
       - stubichat_network
@@ -81,6 +84,8 @@ services:
       - ./logs:/app/logs
     environment:
       - PYTHONPATH=/app
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
       - DEBUG=true
     networks:
       - stubichat_network
@@ -92,22 +97,8 @@ services:
       retries: 3
       start_period: 40s
 
-  # Nginx Reverse Proxy (optional)
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-    networks:
-      - stubichat_network
-    restart: unless-stopped
-    depends_on:
-      - frontend
-      - main-backend
-      - llm-agent
+  # Note: Nginx is now managed in system-docker/docker-compose.yml
+  # This service has been moved to system-docker for better organization
 
 networks:
   stubichat_network:
