@@ -7,12 +7,14 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from app.core.config import settings
 from app.utils.logger import get_logger, log_performance
 from app.models.requests import Message, StreamChunk
+from app.services.base_llm_service import BaseLLMService
 
 
-class OpenAIService:
+class OpenAIService(BaseLLMService):
     """Service for interacting with OpenAI API."""
     
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, organization: Optional[str] = None):
+        super().__init__()
         self.api_key = api_key or settings.openai_api_key
         self.base_url = base_url or settings.openai_base_url
         self.organization = organization or settings.openai_organization
@@ -36,13 +38,7 @@ class OpenAIService:
     
     def _convert_messages(self, messages: list[Message]) -> list[Dict[str, str]]:
         """Convert Pydantic messages to OpenAI format."""
-        openai_messages = []
-        for msg in messages:
-            openai_messages.append({
-                "role": msg.role.value,
-                "content": msg.content
-            })
-        return openai_messages
+        return super()._convert_messages(messages)
     
     async def generate_text(
         self, 

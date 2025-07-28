@@ -34,7 +34,7 @@ print_error() {
 # Stop application services first
 print_status "Stopping application services (Backend, Frontend)..."
 cd backend
-docker-compose down
+docker-compose --profile openai --profile vllm down
 cd ..
 
 # Stop system services

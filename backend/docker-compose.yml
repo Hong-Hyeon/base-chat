@@ -43,11 +43,12 @@ services:
       retries: 3
       start_period: 40s
     depends_on:
-      llm-agent:
+      llm-agent-openai:
         condition: service_healthy
 
   # LLM Agent Service (OpenAI-based)
-  llm-agent:
+  llm-agent-openai:
+    profiles: ["openai", "default"]
     build:
       context: ./llm-agent
       dockerfile: Dockerfile
@@ -58,8 +59,36 @@ services:
       - ./logs:/app/logs
     environment:
       - PYTHONPATH=/app
+      - LLM_TYPE=openai
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - REDIS_URL=${REDIS_URL}
+      - DEBUG=true
+    networks:
+      - stubichat_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # LLM Agent Service (vLLM-based) - Placeholder for future implementation
+  llm-agent-vllm:
+    profiles: ["vllm"]
+    build:
+      context: ./llm-agent
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./llm-agent/app:/app/app
+      - ./logs:/app/logs
+    environment:
+      - PYTHONPATH=/app
+      - LLM_TYPE=vllm
+      - VLLM_MODEL=${VLLM_MODEL:-llama2-7b}
       - REDIS_URL=${REDIS_URL}
       - DEBUG=true
     networks:

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     max_tokens: int = 4000
     temperature: float = 0.7
     
+    # LLM service settings
+    llm_type: str = Field(default="openai", description="LLM service type: openai or vllm")
+    
     # Rate limiting
     rate_limit_per_minute: int = 60
     

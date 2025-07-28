@@ -2,10 +2,15 @@
 
 # StubiChat System Startup Script
 # This script starts all system services and application services
+# Usage: ./start-system.sh [llm_type]
+#   llm_type: openai (default) or vllm
 
 set -e
 
-echo "🚀 Starting StubiChat System..."
+# Parse command line arguments
+LLM_TYPE=${1:-openai}  # Default to openai if no argument provided
+
+echo "🚀 Starting StubiChat System with LLM type: $LLM_TYPE"
 
 # Colors for output
 RED='\033[0;31m'
@@ -60,7 +65,7 @@ wait_for_service() {
     print_status "Waiting for $service_name to be healthy..."
     
     while [ $attempt -le $max_attempts ]; do
-        if docker-compose -f system-docker/docker-compose.yml ps $service_name | grep -q "healthy"; then
+        if docker-compose ps $service_name | grep -q "healthy"; then
             print_success "$service_name is healthy!"
             return 0
         fi
@@ -100,7 +105,15 @@ cd ..
 # Start application services
 print_status "Starting application services (Backend, Frontend)..."
 cd backend
-docker-compose up -d --build
+
+# Start services based on LLM type
+if [ "$LLM_TYPE" = "vllm" ]; then
+    print_status "Starting with vLLM profile..."
+    docker-compose --profile vllm up -d --build
+else
+    print_status "Starting with OpenAI profile..."
+    docker-compose --profile openai up -d --build
+fi
 
 cd ..
 
@@ -143,6 +156,10 @@ cd ..
 echo ""
 print_success "🎉 StubiChat system is starting up!"
 echo ""
+echo "🤖 LLM Configuration:"
+echo "   Type:         $LLM_TYPE"
+echo "   Service:      $(if [ "$LLM_TYPE" = "vllm" ]; then echo "vLLM (local)"; else echo "OpenAI (cloud)"; fi)"
+echo ""
 echo "🌐 Access URLs:"
 echo "   Frontend:     http://localhost:3000"
 echo "   Backend API:  http://localhost:8000"
@@ -152,7 +169,7 @@ echo "   MCP Server:   http://localhost:8002"
 echo "   Nginx:        http://localhost:80"
 echo ""
 echo "🗄️  Database:"
-echo "   PostgreSQL:   localhost:5432"
+echo "   PostgreSQL:   localhost:15432"
 echo "   Redis:        localhost:6379"
 echo ""
 echo "📝 Useful commands:"
