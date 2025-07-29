@@ -1,6 +1,6 @@
 # BaseChat Backend
 
-A production-ready microservice backend for conversational AI applications, built with FastAPI, LangGraph, OpenAI API, and Redis caching.
+A production-ready microservice backend for conversational AI applications, built with FastAPI, LangGraph, OpenAI API, SQLAlchemy ORM, and Redis caching.
 
 ## 🏗️ Architecture
 
@@ -8,13 +8,16 @@ The backend follows a **microservice architecture** with three main services:
 
 ### 1. Main Backend Service (`main-backend`)
 - **Port**: 8000
-- **Purpose**: Orchestration, conversation management, and caching
-- **Technologies**: FastAPI, LangGraph, LangChain, Redis
+- **Purpose**: Orchestration, conversation management, caching, and chat history
+- **Technologies**: FastAPI, LangGraph, LangChain, SQLAlchemy, Alembic, Redis
 - **Features**:
   - Conversation state management
   - LangGraph workflow orchestration
+  - SQLAlchemy ORM database management
+  - Alembic database migrations
   - Redis-based caching system
   - Chat history and context management
+  - User management and session tracking
   - Multi-modal input processing
   - Streaming responses
   - Cache monitoring and management
@@ -41,6 +44,57 @@ The backend follows a **microservice architecture** with three main services:
   - Dynamic tool loading
   - Tool execution monitoring
 
+## 🗄️ Database System
+
+### SQLAlchemy ORM Integration
+- **Models**: `app/models/database_models.py`
+- **Service**: `app/services/sqlalchemy_service.py`
+- **Features**:
+  - Async database operations
+  - Connection pooling
+  - Automatic session management
+  - Type-safe queries
+  - Relationship mapping
+
+### Database Schema
+```sql
+-- Users and Preferences
+users (id, username, email, password_hash, is_active, created_at, updated_at)
+user_preferences (user_id, default_model, default_temperature, max_tokens, created_at, updated_at)
+
+-- Chat Sessions and Messages
+chat_sessions (id, user_id, title, model_type, model_name, is_active, created_at, updated_at)
+messages (id, session_id, role, content, tokens_used, model_used, mcp_tools_used, meta_info, created_at)
+```
+
+### Alembic Migrations
+- **Configuration**: `alembic.ini`, `alembic/env.py`
+- **Migrations**: `alembic/versions/`
+- **Features**:
+  - Automatic migration on startup
+  - Version control for schema changes
+  - Rollback support
+  - Docker volume persistence
+
+## 💬 Chat History System
+
+### Features
+- **User Management**: Create, update, and manage user accounts
+- **Session Management**: Create and manage chat sessions
+- **Message Storage**: Store and retrieve conversation messages
+- **History Retrieval**: Get user conversation history
+- **Statistics**: User activity and usage statistics
+
+### API Endpoints
+- `POST /history/users` - Create new user
+- `GET /history/users/{user_id}` - Get user details
+- `POST /history/sessions` - Create chat session
+- `GET /history/users/{user_id}/sessions` - Get user sessions
+- `POST /history/messages` - Save message
+- `GET /history/sessions/{session_id}/messages` - Get session messages
+- `POST /history/chat/with-history` - Chat with history context
+- `GET /history/users/{user_id}/stats` - Get user statistics
+
 ## 🏭 Factory Pattern Implementation
 
 Both services implement the **Factory Pattern** for improved maintainability, testability, and dependency injection:
@@ -56,6 +110,8 @@ Both services implement the **Factory Pattern** for improved maintainability, te
   - Health checks
   - CORS configuration
   - Cache API integration
+  - Database initialization
+  - Alembic migration automation
 
 ### Service Factory
 - **Location**: `app/factory/service_factory.py`
@@ -73,6 +129,7 @@ Both services implement the **Factory Pattern** for improved maintainability, te
 - ✅ **Flexibility**: Easy to swap implementations
 - ✅ **Production Ready**: Proper error handling and logging
 - ✅ **Caching**: Integrated Redis caching system
+- ✅ **Database**: SQLAlchemy ORM integration
 
 ## 🚀 Caching System
 
@@ -124,6 +181,9 @@ nano .env
 OPENAI_API_KEY=your-openai-api-key-here
 OPENAI_BASE_URL=https://api.openai.com/v1
 
+# Database Configuration
+DATABASE_URL=YOUR-DATABASE-URL
+
 # Model Configuration
 DEFAULT_MODEL=gpt-4
 MAX_TOKENS=4000
@@ -136,8 +196,8 @@ CACHE_MCP_TTL=1800
 CACHE_INTENT_TTL=7200
 
 # Redis Configuration
-REDIS_URL=redis://redis:6379/0
-REDIS_HOST=redis
+REDIS_URL=redis://basechat_redis:6379/0
+REDIS_HOST=basechat_redis
 REDIS_PORT=6379
 
 # Service Configuration
@@ -156,6 +216,7 @@ SECRET_KEY=your-secret-key-change-in-production
 - Python 3.11+
 - Docker and Docker Compose
 - OpenAI API key
+- PostgreSQL (provided via Docker)
 - Redis (provided via Docker)
 
 ### 1. Environment Setup
@@ -163,7 +224,7 @@ SECRET_KEY=your-secret-key-change-in-production
 # Copy environment configuration
 cp env.example .env
 
-# Edit with your OpenAI API key
+# Edit with your OpenAI API key and database settings
 nano .env
 ```
 
@@ -198,16 +259,25 @@ backend/
 │   │   ├── api/              # API endpoints
 │   │   │   ├── cache.py      # Cache monitoring API
 │   │   │   ├── chat.py       # Chat API
+│   │   │   ├── history.py    # Chat history API
 │   │   │   └── mcp_tools.py  # MCP tools API
 │   │   ├── core/             # Core configuration
 │   │   │   ├── config.py     # Settings management
 │   │   │   └── graph.py      # LangGraph workflow
 │   │   ├── services/         # Business logic
-│   │   │   ├── cache_manager.py  # Redis cache management
-│   │   │   ├── llm_client.py     # LLM client with caching
-│   │   │   └── mcp_client.py     # MCP client with caching
+│   │   │   ├── cache_manager.py      # Redis cache management
+│   │   │   ├── llm_client.py         # LLM client with caching
+│   │   │   ├── mcp_client.py         # MCP client with caching
+│   │   │   ├── sqlalchemy_service.py # SQLAlchemy database service
+│   │   │   └── sqlalchemy_chat_history_service.py # Chat history service
 │   │   ├── models/           # Data models
+│   │   │   ├── database_models.py    # SQLAlchemy ORM models
+│   │   │   ├── chat_history.py       # Chat history Pydantic models
+│   │   │   └── user.py               # User Pydantic models
 │   │   └── utils/            # Utilities
+│   ├── alembic/              # Database migrations
+│   │   ├── versions/         # Migration files
+│   │   └── env.py            # Alembic environment
 │   ├── tests/                # Unit tests
 │   │   └── test_cache_manager.py
 │   ├── requirements.txt      # Python dependencies
@@ -231,6 +301,35 @@ backend/
 └── env.example               # Environment template
 ```
 
+## 🗄️ Database Management
+
+### Alembic Migrations
+```bash
+# Create new migration
+docker exec backend-main-backend-1 alembic revision --autogenerate -m "Description"
+
+# Apply migrations
+docker exec backend-main-backend-1 alembic upgrade head
+
+# Check migration status
+docker exec backend-main-backend-1 alembic current
+
+# Rollback migration
+docker exec backend-main-backend-1 alembic downgrade -1
+```
+
+### Database Operations
+```bash
+# Connect to database
+docker exec basechat_postgres psql -U admin -d basechat
+
+# Check tables
+docker exec basechat_postgres psql -U admin -d basechat -c "\dt"
+
+# Check data
+docker exec basechat_postgres psql -U admin -d basechat -c "SELECT COUNT(*) FROM users;"
+```
+
 ## 🧪 Testing
 
 ### Running Tests
@@ -251,6 +350,8 @@ python -m pytest tests/ -v
 - MCP client caching
 - Cache invalidation strategies
 - Performance metrics
+- Database operations
+- Chat history functionality
 
 ## 📊 Monitoring
 
@@ -258,12 +359,14 @@ python -m pytest tests/ -v
 - `GET /health` - Service health status
 - `GET /cache/health` - Cache system health
 - `GET /cache/stats` - Cache performance metrics
+- `GET /history/health` - Chat history system health
 
 ### Logging
 - Structured logging with loguru
 - Performance monitoring
 - Cache hit/miss tracking
 - Error tracking and reporting
+- Database operation logging
 
 ## 🔄 LLM Service Selection
 
@@ -292,11 +395,19 @@ LLM_TYPE=openai  # or vllm
 2. **MCP Tool Caching**: Reduces tool execution time by 50-70%
 3. **Intent Analysis Caching**: Reduces analysis time by 70%+
 
+### Database Optimization
+1. **Connection Pooling**: Efficient database connections
+2. **Async Operations**: Non-blocking database queries
+3. **Indexed Queries**: Optimized data retrieval
+4. **Migration Management**: Automated schema updates
+
 ### Best Practices
 - Monitor cache hit rates
 - Adjust TTL based on usage patterns
 - Use cache invalidation strategically
 - Monitor Redis memory usage
+- Regular database maintenance
+- Monitor migration status
 
 ## 🛠️ Development
 
@@ -318,6 +429,12 @@ LLM_TYPE=openai  # or vllm
 3. Update configuration
 4. Add tests
 
+### Database Schema Changes
+1. Update SQLAlchemy models in `database_models.py`
+2. Generate Alembic migration
+3. Test migration on development database
+4. Apply migration to production
+
 ## 📈 Production Deployment
 
 ### Docker Compose
@@ -331,12 +448,15 @@ docker-compose --profile openai -f docker-compose.yml -f docker-compose.prod.yml
 - Configure proper `SECRET_KEY`
 - Set production Redis configuration
 - Configure monitoring and logging
+- Set production database URL
 
 ### Monitoring
 - Cache performance metrics
 - Service health checks
 - Error rate monitoring
 - Response time tracking
+- Database performance monitoring
+- Migration status monitoring
 
 ## 🤝 Contributing
 
