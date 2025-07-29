@@ -3,6 +3,7 @@ fastapi==0.115.12
 uvicorn[standard]==0.34.1
 pydantic==2.11.3
 pydantic-settings==2.8.1
+email-validator==2.1.0
 
 # LangGraph and LangChain - Compatible versions
 langgraph==0.0.26
@@ -28,9 +29,10 @@ loguru==0.7.2
 prometheus-fastapi-instrumentator==7.1.0
 
 # Database (optional for conversation history)
-sqlalchemy==2.0.27
+sqlalchemy[asyncio]==2.0.27
 alembic==1.13.1
 psycopg2-binary==2.9.9
+asyncpg==0.29.0
 
 # Security
 python-multipart==0.0.20

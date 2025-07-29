@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import time
 from datetime import datetime
@@ -11,6 +12,7 @@ from app.utils.logger import get_logger, log_request_info
 from app.api.chat import router as chat_router
 from app.api.mcp_tools import router as mcp_tools_router
 from app.api.cache import router as cache_router
+from app.api.history import router as history_router
 
 
 class AppFactory:
@@ -40,6 +42,29 @@ class AppFactory:
                 self.logger.info(f"LLM Agent Health: {health.get('status', 'unknown')}")
             except Exception as e:
                 self.logger.warning(f"LLM Agent health check failed: {str(e)}")
+            
+            try:
+                # Initialize SQLAlchemy database service
+                from app.services.sqlalchemy_service import init_database
+                await init_database()
+                self.logger.info("SQLAlchemy database service initialized successfully")
+            except Exception as e:
+                self.logger.error(f"SQLAlchemy database service initialization failed: {str(e)}")
+            
+            try:
+                # Run Alembic migrations
+                import subprocess
+                import sys
+                result = subprocess.run([
+                    sys.executable, "-m", "alembic", "upgrade", "head"
+                ], capture_output=True, text=True, cwd="/app")
+                
+                if result.returncode == 0:
+                    self.logger.info("Database migrations applied successfully")
+                else:
+                    self.logger.error(f"Database migration failed: {result.stderr}")
+            except Exception as e:
+                self.logger.error(f"Failed to run database migrations: {str(e)}")
             
             yield
             
@@ -90,7 +115,7 @@ class AppFactory:
         @app.exception_handler(Exception)
         async def global_exception_handler(request: Request, exc: Exception):
             self.logger.error(f"Unhandled exception: {str(exc)}")
-            return HTTPException(status_code=500, detail="Internal server error")
+            return JSONResponse(status_code=500, content={"detail": "Internal server error"})
     
     def create_routes(self, app: FastAPI):
         """Add routes to the FastAPI application."""
@@ -98,6 +123,7 @@ class AppFactory:
         # Include routers
         app.include_router(chat_router)
         app.include_router(mcp_tools_router)
+        app.include_router(history_router)
         app.include_router(cache_router)
         
         # Root endpoint

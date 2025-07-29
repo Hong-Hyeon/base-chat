@@ -25,14 +25,19 @@ services:
       - "8000:8000"
     volumes:
       - ./main-backend/app:/app/app
+      - ./main-backend/alembic.ini:/app/alembic.ini
+      - ./main-backend/alembic:/app/alembic
       - ./logs:/app/logs
+    env_file:
+      - env.example
     environment:
       - PYTHONPATH=/app
       - LLM_AGENT_URL=http://backend-llm-agent-openai-1:8001
       - MCP_SERVER_URL=http://backend-mcp-server-1:8002
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
+      - DATABASE_URL=postgresql://admin:higk8156@basechat_postgres:5432/basechat
+      - REDIS_URL=redis://basechat_redis:6379/0
       - DEBUG=true
+      - SECRET_KEY=your-secret-key-change-in-production
     networks:
       - basechat_network
     restart: unless-stopped
@@ -56,13 +61,16 @@ services:
     volumes:
       - ./llm-agent/app:/app/app
       - ./logs:/app/logs
+    env_file:
+      - env.example
     environment:
       - PYTHONPATH=/app
       - LLM_TYPE=openai
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
-      - REDIS_URL=${REDIS_URL}
+      - REDIS_URL=redis://basechat_redis:6379/0
       - DEBUG=true
+      - SECRET_KEY=your-secret-key-change-in-production
     networks:
       - basechat_network
     restart: unless-stopped
@@ -110,11 +118,14 @@ services:
     volumes:
       - ./mcp-server/app:/app/app
       - ./logs:/app/logs
+    env_file:
+      - env.example
     environment:
       - PYTHONPATH=/app
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
+      - DATABASE_URL=postgresql://admin:higk8156@basechat_postgres:5432/basechat
+      - REDIS_URL=redis://basechat_redis:6379/0
       - DEBUG=true
+      - SECRET_KEY=your-secret-key-change-in-production
     networks:
       - basechat_network
     restart: unless-stopped
@@ -130,4 +141,5 @@ services:
 
 networks:
   basechat_network:
-    driver: bridge 
+    external: true
+    name: basechat_network 

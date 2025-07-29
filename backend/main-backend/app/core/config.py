@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     """Application settings with environment variable support."""
     
     # Application settings
-    app_name: str = "Stubichat Main Backend"
+    app_name: str = "BaseChat Main Backend"
     app_version: str = "1.0.0"
     debug: bool = False
     
@@ -17,25 +17,25 @@ class Settings(BaseSettings):
     port: int = 8000
     
     # LLM Agent service settings
-    llm_agent_url: str = "http://backend-llm-agent-openai-1:8001"
+    llm_agent_url: str = os.getenv("LLM_AGENT_URL")
     llm_agent_timeout: int = 30
     
     # MCP Server settings
-    mcp_server_url: str = "http://backend-mcp-server-1:8002"
+    mcp_server_url: str = os.getenv("MCP_SERVER_URL")
     
     # OpenAI settings (for direct fallback)
     openai_api_key: Optional[str] = None
     openai_base_url: Optional[str] = None
     
     # Database settings (optional)
-    database_url: Optional[str] = None
+    database_url: Optional[str] = os.getenv("DATABASE_URL")
     
     # Redis Cache settings
-    redis_url: str = "redis://redis:6379/0"
-    redis_host: str = "redis"
-    redis_port: int = 6379
-    redis_db: int = 0
-    redis_password: Optional[str] = None
+    redis_url: str = os.getenv("REDIS_URL", "redis://basechat_redis:6379/0")
+    redis_host: str = os.getenv("REDIS_HOST", "basechat_redis")
+    redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
+    redis_db: int = int(os.getenv("REDIS_DB", "0"))
+    redis_password: Optional[str] = os.getenv("REDIS_PASSWORD")
     
     # Cache configuration
     cache_enabled: bool = True
@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     cache_intent_ttl: int = 7200   # Intent analysis: 2 hours
     
     # Security settings
-    secret_key: str = "your-secret-key-change-in-production"
+    secret_key: str = os.getenv("SECRET_KEY")
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     
