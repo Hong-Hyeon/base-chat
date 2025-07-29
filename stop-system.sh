@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# StubiChat System Stop Script
+# BaseChat System Stop Script
 # This script stops all system services and application services
 
 set -e
 
-echo "🛑 Stopping StubiChat System..."
+echo "🛑 Stopping BaseChat System..."
 
 # Colors for output
 RED='\033[0;31m'
@@ -43,7 +43,7 @@ cd system-docker
 docker-compose down
 cd ..
 
-print_success "🎉 All StubiChat services have been stopped!"
+print_success "🎉 All BaseChat services have been stopped!"
 echo ""
 echo "📝 To start the system again, run: ./start-system.sh"
 echo "" 

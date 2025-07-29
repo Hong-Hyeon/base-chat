@@ -30,6 +30,24 @@ class Settings(BaseSettings):
     # Database settings (optional)
     database_url: Optional[str] = None
     
+    # Redis Cache settings
+    redis_url: str = "redis://redis:6379/0"
+    redis_host: str = "redis"
+    redis_port: int = 6379
+    redis_db: int = 0
+    redis_password: Optional[str] = None
+    
+    # Cache configuration
+    cache_enabled: bool = True
+    cache_default_ttl: int = 3600  # 1 hour
+    cache_max_size: str = "1GB"
+    cache_eviction_policy: str = "lru"
+    
+    # Cache TTL settings (in seconds)
+    cache_llm_ttl: int = 3600      # LLM responses: 1 hour
+    cache_mcp_ttl: int = 1800      # MCP tools: 30 minutes
+    cache_intent_ttl: int = 7200   # Intent analysis: 2 hours
+    
     # Security settings
     secret_key: str = "your-secret-key-change-in-production"
     algorithm: str = "HS256"

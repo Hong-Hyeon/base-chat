@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# StubiChat System Startup Script
+# BaseChat System Startup Script
 # This script starts all system services and application services
 # Usage: ./start-system.sh [llm_type]
 #   llm_type: openai (default) or vllm
@@ -10,7 +10,7 @@ set -e
 # Parse command line arguments
 LLM_TYPE=${1:-openai}  # Default to openai if no argument provided
 
-echo "🚀 Starting StubiChat System with LLM type: $LLM_TYPE"
+echo "🚀 Starting BaseChat System with LLM type: $LLM_TYPE"
 
 # Colors for output
 RED='\033[0;31m'
@@ -154,7 +154,7 @@ docker-compose ps
 cd ..
 
 echo ""
-print_success "🎉 StubiChat system is starting up!"
+print_success "🎉 BaseChat system is starting up!"
 echo ""
 echo "🤖 LLM Configuration:"
 echo "   Type:         $LLM_TYPE"

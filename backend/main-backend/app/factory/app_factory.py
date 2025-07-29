@@ -10,6 +10,7 @@ from app.core.config import Settings
 from app.utils.logger import get_logger, log_request_info
 from app.api.chat import router as chat_router
 from app.api.mcp_tools import router as mcp_tools_router
+from app.api.cache import router as cache_router
 
 
 class AppFactory:
@@ -97,6 +98,7 @@ class AppFactory:
         # Include routers
         app.include_router(chat_router)
         app.include_router(mcp_tools_router)
+        app.include_router(cache_router)
         
         # Root endpoint
         @app.get("/")

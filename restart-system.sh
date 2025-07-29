@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# StubiChat System Restart Script
+# BaseChat System Restart Script
 # This script restarts all system services and application services
 
 set -e
 
-echo "🔄 Restarting StubiChat System..."
+echo "🔄 Restarting BaseChat System..."
 
 # Colors for output
 RED='\033[0;31m'
@@ -42,5 +42,5 @@ sleep 5
 print_status "Starting all services..."
 ./start-system.sh
 
-print_success "🎉 StubiChat system has been restarted!"
+print_success "🎉 BaseChat system has been restarted!"
 echo "" 

@@ -4,11 +4,12 @@ from typing import Dict, Any, Optional, AsyncGenerator
 from app.core.config import settings
 from app.utils.logger import get_logger, log_performance
 from app.models.chat import ChatRequest, StreamChunk
+from app.services.cache_manager import get_cache_manager
 import json
 
 
 class LLMClient:
-    """HTTP client for communicating with the LLM Agent service."""
+    """HTTP client for communicating with the LLM Agent service with caching support."""
     
     def __init__(self, base_url: Optional[str] = None, timeout: Optional[int] = None):
         self.base_url = base_url or settings.llm_agent_url
@@ -55,8 +56,34 @@ class LLMClient:
         }
     
     async def generate_text(self, request: ChatRequest) -> Dict[str, Any]:
-        """Generate text using the LLM agent service."""
+        """Generate text using the LLM agent service with caching."""
         try:
+            # Get cache manager
+            cache_manager = await get_cache_manager()
+            
+            # Convert messages to dict format for cache key generation
+            messages_dict = []
+            for msg in request.messages:
+                msg_dict = msg.model_dump()
+                if msg_dict.get("timestamp") and hasattr(msg_dict["timestamp"], "isoformat"):
+                    msg_dict["timestamp"] = msg_dict["timestamp"].isoformat()
+                messages_dict.append(msg_dict)
+            
+            # Check cache first
+            cached_response = await cache_manager.get_llm_cache(
+                messages=messages_dict,
+                model=request.model,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens
+            )
+            
+            if cached_response:
+                self.logger.info("LLM response retrieved from cache")
+                return cached_response
+            
+            # Cache miss - call LLM agent
+            self.logger.info("LLM cache miss - calling LLM agent")
+            
             # Convert ChatRequest to GenerateRequest format
             generate_data = self._convert_chat_to_generate_request(request)
             
@@ -66,7 +93,19 @@ class LLMClient:
                 data=generate_data
             )
             response.raise_for_status()
-            return response.json()
+            response_data = response.json()
+            
+            # Cache the response
+            await cache_manager.set_llm_cache(
+                messages=messages_dict,
+                model=request.model,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens,
+                response=response_data
+            )
+            
+            return response_data
+            
         except httpx.HTTPStatusError as e:
             self.logger.error(f"LLM Agent HTTP error: {e.response.status_code} - {e.response.text}")
             raise

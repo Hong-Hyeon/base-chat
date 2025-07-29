@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Redis for testing
+  redis-test:
+    image: redis:7-alpine
+    container_name: basechat_redis_test
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    networks:
+      - test_network
+
+  # PostgreSQL for testing (if needed) - commented out for now
+  # postgres-test:
+  #   image: postgres:15-alpine
+  #   container_name: stubichat_postgres_test
+  #   environment:
+  #     POSTGRES_DB: stubichat_test
+  #     POSTGRES_USER: stubichat_user
+  #     POSTGRES_PASSWORD: stubichat_password
+  #   ports:
+  #     - "5433:5432"
+  #   volumes:
+  #     - postgres_test_data:/var/lib/postgresql/data
+  #   networks:
+  #     - test_network
+
+  # Main backend tests
+  main-backend-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stubichat_main_backend_test
+    environment:
+      - REDIS_URL=redis://redis-test:6379/0
+      - REDIS_HOST=redis-test
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - CACHE_ENABLED=true
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./tests:/app/tests
+      - ./app:/app/app
+    depends_on:
+      - redis-test
+    networks:
+      - test_network
+    command: >
+      sh -c "
+        echo 'Waiting for Redis...' &&
+        python -c 'import time; import redis; r=redis.Redis(host=\"redis-test\", port=6379); r.ping()' &&
+        echo 'Running tests...' &&
+        python -m pytest tests/ -v --tb=short
+      "
+
+networks:
+  test_network:
+    driver: bridge 

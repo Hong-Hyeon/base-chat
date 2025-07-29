@@ -14,6 +14,9 @@ langchain-openai==0.0.8
 httpx==0.25.2
 aiohttp==3.11.18
 
+# Redis cache support
+redis[hiredis]==5.0.1
+
 # Utilities
 python-dotenv==1.1.0
 typing-extensions==4.13.2
@@ -32,4 +35,9 @@ psycopg2-binary==2.9.9
 # Security
 python-multipart==0.0.20
 python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4 
+passlib[bcrypt]==1.7.4
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0 

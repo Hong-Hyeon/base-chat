@@ -2,10 +2,11 @@ import httpx
 from typing import Dict, Any, Optional
 from app.utils.logger import get_logger
 from app.core.config import get_settings
+from app.services.cache_manager import get_cache_manager
 
 
 class MCPClient:
-    """Client for calling MCP tools from the main backend using HTTP API."""
+    """Client for calling MCP tools from the main backend using HTTP API with caching support."""
     
     def __init__(self, base_url: str = None):
         self.settings = get_settings()
@@ -15,7 +16,7 @@ class MCPClient:
     
     async def call_tool(self, tool_name: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Call an MCP tool by name with input data using HTTP API.
+        Call an MCP tool by name with input data using HTTP API with caching.
         
         Args:
             tool_name: Name of the MCP tool to call
@@ -25,6 +26,19 @@ class MCPClient:
             Tool response data
         """
         try:
+            # Get cache manager
+            cache_manager = await get_cache_manager()
+            
+            # Check cache first
+            cached_result = await cache_manager.get_mcp_cache(tool_name, input_data)
+            
+            if cached_result:
+                self.logger.info(f"MCP tool {tool_name} result retrieved from cache")
+                return cached_result
+            
+            # Cache miss - call MCP tool
+            self.logger.info(f"MCP cache miss - calling tool {tool_name}")
+            
             # Use the direct HTTP endpoint for the tool
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -33,7 +47,12 @@ class MCPClient:
                     timeout=30.0
                 )
                 response.raise_for_status()
-                return response.json()
+                result = response.json()
+                
+                # Cache the result
+                await cache_manager.set_mcp_cache(tool_name, input_data, result)
+                
+                return result
                 
         except httpx.HTTPStatusError as e:
             self.logger.error(f"HTTP error calling tool {tool_name}: {e.response.status_code}")
@@ -99,8 +118,8 @@ class MCPClient:
                 return response.json()
                 
         except httpx.HTTPStatusError as e:
-            self.logger.error(f"HTTP error in health check: {e.response.status_code}")
-            return {"status": "unhealthy", "error": str(e)}
+            self.logger.error(f"HTTP error checking MCP health: {e.response.status_code}")
+            return {"status": "unhealthy", "error": f"HTTP {e.response.status_code}"}
         except Exception as e:
-            self.logger.error(f"Error in health check: {str(e)}")
+            self.logger.error(f"Error checking MCP health: {str(e)}")
             return {"status": "unhealthy", "error": str(e)} 

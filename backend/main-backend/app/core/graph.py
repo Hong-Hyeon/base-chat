@@ -187,7 +187,7 @@ async def load_mcp_tools(state: Union[Dict[str, Any], ConversationState]) -> Dic
 
 
 async def analyze_user_intent(state: Union[Dict[str, Any], ConversationState]) -> Dict[str, Any]:
-    """Analyze user intent using LLM to determine if MCP tools are needed."""
+    """Analyze user intent using LLM to determine if MCP tools are needed with caching."""
     logger.info("Analyzing user intent using LLM for MCP tool requirements")
     
     conv_state = ensure_conversation_state(state)
@@ -197,6 +197,35 @@ async def analyze_user_intent(state: Union[Dict[str, Any], ConversationState]) -
         last_message = conv_state.messages[-1]
         user_content = last_message.content
         logger.info(f"User content: '{user_content}'")
+        
+        # Check cache first for intent analysis
+        from app.services.cache_manager import get_cache_manager
+        cache_manager = await get_cache_manager()
+        
+        cached_intent = await cache_manager.get_intent_cache(user_content)
+        if cached_intent:
+            logger.info("Intent analysis result retrieved from cache")
+            conv_state.mcp_tools_needed = cached_intent.get("tools_needed", [])
+            conv_state.metadata["llm_tool_decision"] = cached_intent.get("llm_decision", "")
+            conv_state.metadata["llm_tool_analysis"] = True
+            conv_state.metadata["cached_intent"] = True
+            
+            if conv_state.mcp_tools_needed:
+                logger.info(f"Cached intent decided tools needed: {conv_state.mcp_tools_needed}")
+            else:
+                logger.info("Cached intent decided no tools needed")
+            
+            return {
+                "messages": serialize_messages(conv_state.messages),
+                "metadata": serialize_metadata(conv_state.metadata),
+                "session_id": conv_state.session_id,
+                "mcp_tools_needed": conv_state.mcp_tools_needed,
+                "mcp_tool_calls": serialize_mcp_tool_calls(conv_state.mcp_tool_calls),
+                "mcp_tools_available": conv_state.mcp_tools_available
+            }
+        
+        # Cache miss - perform intent analysis
+        logger.info("Intent cache miss - performing LLM analysis")
         
         # Get available tool names and descriptions
         available_tools = []
@@ -244,6 +273,14 @@ async def analyze_user_intent(state: Union[Dict[str, Any], ConversationState]) -
         # Store decision metadata
         conv_state.metadata["llm_tool_decision"] = llm_decision
         conv_state.metadata["llm_tool_analysis"] = True
+        
+        # Cache the intent analysis result
+        intent_result = {
+            "tools_needed": tools_needed,
+            "llm_decision": llm_decision,
+            "user_content": user_content
+        }
+        await cache_manager.set_intent_cache(user_content, intent_result)
         
         if tools_needed:
             logger.info(f"LLM decided tools needed: {tools_needed}")
