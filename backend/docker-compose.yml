@@ -28,8 +28,8 @@ services:
       - ./logs:/app/logs
     environment:
       - PYTHONPATH=/app
-      - LLM_AGENT_URL=http://llm-agent:8001
-      - MCP_SERVER_URL=http://mcp-server:8002
+      - LLM_AGENT_URL=http://backend-llm-agent-openai-1:8001
+      - MCP_SERVER_URL=http://backend-mcp-server-1:8002
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=${REDIS_URL}
       - DEBUG=true
@@ -48,7 +48,6 @@ services:
 
   # LLM Agent Service (OpenAI-based)
   llm-agent-openai:
-    profiles: ["openai", "default"]
     build:
       context: ./llm-agent
       dockerfile: Dockerfile

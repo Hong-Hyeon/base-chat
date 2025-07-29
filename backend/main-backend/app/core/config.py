@@ -17,11 +17,11 @@ class Settings(BaseSettings):
     port: int = 8000
     
     # LLM Agent service settings
-    llm_agent_url: str = "http://localhost:8001"
+    llm_agent_url: str = "http://backend-llm-agent-openai-1:8001"
     llm_agent_timeout: int = 30
     
     # MCP Server settings
-    mcp_server_url: str = "http://mcp-server:8002"
+    mcp_server_url: str = "http://backend-mcp-server-1:8002"
     
     # OpenAI settings (for direct fallback)
     openai_api_key: Optional[str] = None
