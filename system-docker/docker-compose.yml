@@ -41,6 +41,29 @@ services:
       retries: 5
       start_period: 10s
 
+  # PostgreSQL for embeddings (pgvector17)
+  embedding-postgres:
+    image: pgvector/pgvector:pg17
+    container_name: basechat_embedding_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${EMBEDDING_DB:-embeddings}
+      POSTGRES_USER: ${EMBEDDING_USER:-embedding_user}
+      POSTGRES_PASSWORD: ${EMBEDDING_PASSWORD:-embedding_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "25432:5432"
+    volumes:
+      - embedding_postgres_data:/var/lib/postgresql/data
+    networks:
+      - basechat_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${EMBEDDING_USER:-embedding_user} -d ${EMBEDDING_DB:-embeddings}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
@@ -65,10 +88,56 @@ services:
       retries: 3
       start_period: 10s
 
+  # Prometheus for monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: basechat_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - basechat_network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: basechat_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - basechat_network
+    depends_on:
+      - prometheus
+
 volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  embedding_postgres_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 networks:

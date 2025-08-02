@@ -14,11 +14,11 @@ services:
   # PostgreSQL for testing (if needed) - commented out for now
   # postgres-test:
   #   image: postgres:15-alpine
-  #   container_name: stubichat_postgres_test
+  #   container_name: basechat_postgres_test
   #   environment:
-  #     POSTGRES_DB: stubichat_test
-  #     POSTGRES_USER: stubichat_user
-  #     POSTGRES_PASSWORD: stubichat_password
+  #     POSTGRES_DB: basechat_test
+  #     POSTGRES_USER: basechat_user
+  #     POSTGRES_PASSWORD: basechat_password
   #   ports:
   #     - "5433:5432"
   #   volumes:
@@ -31,7 +31,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: stubichat_main_backend_test
+    container_name: basechat_main_backend_test
     environment:
       - REDIS_URL=redis://redis-test:6379/0
       - REDIS_HOST=redis-test

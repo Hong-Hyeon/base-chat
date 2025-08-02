@@ -124,10 +124,14 @@ class AppFactory:
                 description=self.settings.mcp_server_description
             )
             
+            # Register RAG tools
+            from app.tools import register_rag_tool
+            register_rag_tool(mcp)
+            
             # Mount the MCP server
             mcp.mount()
             
-            self.logger.info("MCP server mounted successfully at /mcp")
+            self.logger.info("MCP server mounted successfully at /mcp with RAG tools")
             
         except Exception as e:
             self.logger.error(f"Failed to create MCP server: {str(e)}")

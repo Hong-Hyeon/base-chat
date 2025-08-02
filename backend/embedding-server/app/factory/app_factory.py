@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import time
 from datetime import datetime
@@ -9,11 +8,9 @@ from typing import Optional
 
 from app.core.config import Settings
 from app.utils.logger import get_logger, log_request_info
-from app.api.chat import router as chat_router
-from app.api.mcp_tools import router as mcp_tools_router
-from app.api.cache import router as cache_router
-from app.api.history import router as history_router
-from app.api.rag import router as rag_router, set_rag_client
+from app.services.gpt_embedding_service import GPTEmbeddingService
+from app.services.vector_store_service import VectorStoreService
+from app.services.batch_service import BatchService
 
 
 class AppFactory:
@@ -22,6 +19,9 @@ class AppFactory:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.logger = get_logger("app_factory")
+        self.embedding_service = None
+        self.vector_store_service = None
+        self.batch_service = None
     
     def create_lifespan(self):
         """Create application lifespan manager."""
@@ -30,59 +30,43 @@ class AppFactory:
         async def lifespan(app: FastAPI):
             """Application lifespan manager for startup and shutdown events."""
             # Startup
-            self.logger.info("=== Stubichat Main Backend Starting Up ===")
+            self.logger.info("=== Embedding Server Starting Up ===")
             self.logger.info(f"App Name: {self.settings.app_name}")
             self.logger.info(f"Version: {self.settings.app_version}")
             self.logger.info(f"Debug Mode: {self.settings.debug}")
-            self.logger.info(f"LLM Agent URL: {self.settings.llm_agent_url}")
+            self.logger.info(f"Embedding Model: {self.settings.embedding_model}")
             
+            # Initialize services
             try:
-                # Health check of LLM agent service
-                from app.services.llm_client import llm_client
-                health = await llm_client.health_check()
-                self.logger.info(f"LLM Agent Health: {health.get('status', 'unknown')}")
-            except Exception as e:
-                self.logger.warning(f"LLM Agent health check failed: {str(e)}")
-            
-            try:
-                # Initialize SQLAlchemy database service
-                from app.services.sqlalchemy_service import init_database
-                await init_database()
-                self.logger.info("SQLAlchemy database service initialized successfully")
-            except Exception as e:
-                self.logger.error(f"SQLAlchemy database service initialization failed: {str(e)}")
-            
-            try:
-                # Run Alembic migrations
-                import subprocess
-                import sys
-                result = subprocess.run([
-                    sys.executable, "-m", "alembic", "upgrade", "head"
-                ], capture_output=True, text=True, cwd="/app")
+                self.embedding_service = GPTEmbeddingService()
+                self.vector_store_service = VectorStoreService()
+                self.batch_service = BatchService()
                 
-                if result.returncode == 0:
-                    self.logger.info("Database migrations applied successfully")
-                else:
-                    self.logger.error(f"Database migration failed: {result.stderr}")
-            except Exception as e:
-                self.logger.error(f"Failed to run database migrations: {str(e)}")
-            
-            try:
-                # Initialize RAG client
-                from app.services.rag_client import RAGClient
-                rag_client = RAGClient()
-                set_rag_client(rag_client)
+                # Initialize database
+                await self.vector_store_service.initialize_database()
                 
-                # Health check of RAG service
-                health = await rag_client.health_check()
-                self.logger.info(f"RAG Service Health: {health.get('status', 'unknown')}")
+                # Set global service instances in API routes
+                from app.api.embedding_routes import set_services
+                set_services(self.embedding_service, self.vector_store_service)
+                
+                from app.api.batch_routes import set_batch_service
+                set_batch_service(self.batch_service)
+                
+                # Health checks
+                embedding_health = await self.embedding_service.health_check()
+                vector_store_health = await self.vector_store_service.health_check()
+                
+                self.logger.info(f"Embedding Service Health: {embedding_health['status']}")
+                self.logger.info(f"Vector Store Health: {vector_store_health['status']}")
+                
             except Exception as e:
-                self.logger.warning(f"RAG service initialization failed: {str(e)}")
+                self.logger.error(f"Failed to initialize services: {str(e)}")
+                raise
             
             yield
             
             # Shutdown
-            self.logger.info("=== Stubichat Main Backend Shutting Down ===")
+            self.logger.info("=== Embedding Server Shutting Down ===")
         
         return lifespan
     
@@ -128,17 +112,30 @@ class AppFactory:
         @app.exception_handler(Exception)
         async def global_exception_handler(request: Request, exc: Exception):
             self.logger.error(f"Unhandled exception: {str(exc)}")
-            return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+            return HTTPException(status_code=500, detail="Internal server error")
     
     def create_routes(self, app: FastAPI):
         """Add routes to the FastAPI application."""
         
-        # Include routers
-        app.include_router(chat_router)
-        app.include_router(mcp_tools_router)
-        app.include_router(history_router)
-        app.include_router(cache_router)
-        app.include_router(rag_router)
+        # Import and include routers
+        from app.api.embedding_routes import router as embedding_router
+        from app.api.batch_routes import router as batch_router
+        from app.api.table_routes import router as table_router, set_vector_store_service
+        
+        app.include_router(embedding_router)
+        app.include_router(batch_router)
+        app.include_router(table_router)
+        
+        # Set vector store service for table routes
+        set_vector_store_service(self.vector_store_service)
+        
+        # Add monitoring endpoints
+        from app.monitoring.prometheus_metrics import get_metrics_response
+        
+        @app.get("/metrics")
+        async def metrics():
+            """Prometheus metrics endpoint."""
+            return get_metrics_response()
         
         # Root endpoint
         @app.get("/")
@@ -153,12 +150,34 @@ class AppFactory:
         # Health check endpoint
         @app.get("/health")
         async def health():
-            return {
-                "status": "healthy",
-                "service": "main-backend",
-                "version": self.settings.app_version,
-                "timestamp": datetime.now().isoformat()
-            }
+            try:
+                embedding_health = await self.embedding_service.health_check()
+                vector_store_health = await self.vector_store_service.health_check()
+                
+                # Check Celery status
+                try:
+                    from app.celery_app import celery_app
+                    celery_health = "healthy" if celery_app.control.inspect().active() else "unhealthy"
+                except:
+                    celery_health = "unhealthy"
+                
+                return {
+                    "status": "healthy" if embedding_health["status"] == "healthy" and vector_store_health["status"] == "healthy" else "unhealthy",
+                    "service": "embedding-server",
+                    "version": self.settings.app_version,
+                    "timestamp": datetime.now().isoformat(),
+                    "embedding_service": embedding_health["status"],
+                    "vector_store": vector_store_health["status"],
+                    "celery": celery_health
+                }
+            except Exception as e:
+                return {
+                    "status": "unhealthy",
+                    "service": "embedding-server",
+                    "version": self.settings.app_version,
+                    "timestamp": datetime.now().isoformat(),
+                    "error": str(e)
+                }
     
     def create_app(self, settings: Optional[Settings] = None) -> FastAPI:
         """Create and configure the FastAPI application."""
@@ -169,7 +188,7 @@ class AppFactory:
         app = FastAPI(
             title=settings.app_name,
             version=settings.app_version,
-            description="Main backend service for Stubichat with LangGraph orchestration",
+            description="Embedding server for RAG applications",
             docs_url="/docs" if settings.debug else None,
             redoc_url="/redoc" if settings.debug else None,
             lifespan=self.create_lifespan()
@@ -195,4 +214,4 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         settings = get_settings()
     
     factory = AppFactory(settings)
-    return factory.create_app(settings) 
+    return factory.create_app(settings)

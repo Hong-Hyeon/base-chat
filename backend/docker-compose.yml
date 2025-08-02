@@ -136,6 +136,80 @@ services:
       retries: 3
       start_period: 40s
 
+  # Embedding Server Service
+  embedding-server:
+    build:
+      context: ./embedding-server
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./embedding-server/app:/app/app
+      - ./logs:/app/logs
+    env_file:
+      - env.example
+    environment:
+      - PYTHONPATH=/app
+      - EMBEDDING_DATABASE_URL=postgresql://embedding_user:embedding_password@basechat_embedding_postgres:5432/embeddings
+      - REDIS_URL=redis://basechat_redis:6379/1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - DEBUG=true
+    networks:
+      - basechat_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Celery Worker Service
+  celery-worker:
+    build:
+      context: ./embedding-server
+      dockerfile: Dockerfile
+    command: celery -A app.celery_app worker --loglevel=info
+    volumes:
+      - ./embedding-server/app:/app/app
+      - ./logs:/app/logs
+    env_file:
+      - env.example
+    environment:
+      - PYTHONPATH=/app
+      - EMBEDDING_DATABASE_URL=postgresql://embedding_user:embedding_password@basechat_embedding_postgres:5432/embeddings
+      - REDIS_URL=redis://basechat_redis:6379/1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - DEBUG=true
+    networks:
+      - basechat_network
+    restart: unless-stopped
+
+  # Celery Beat Service (for scheduled tasks)
+  celery-beat:
+    build:
+      context: ./embedding-server
+      dockerfile: Dockerfile
+    command: celery -A app.celery_app beat --loglevel=info
+    volumes:
+      - ./embedding-server/app:/app/app
+      - ./logs:/app/logs
+    env_file:
+      - env.example
+    environment:
+      - PYTHONPATH=/app
+      - EMBEDDING_DATABASE_URL=postgresql://embedding_user:embedding_password@basechat_embedding_postgres:5432/embeddings
+      - REDIS_URL=redis://basechat_redis:6379/1
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - DEBUG=true
+    networks:
+      - basechat_network
+    restart: unless-stopped
+
+
   # Note: Nginx is now managed in system-docker/docker-compose.yml
   # This service has been moved to system-docker for better organization
 
