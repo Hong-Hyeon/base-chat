@@ -329,8 +329,15 @@ Rules:
 1. Only use tools if they are clearly needed for the user's request
 2. For echo tool: use when user wants something repeated or echoed back
 3. For web_search tool: use when user asks for current information, news, facts, or anything that requires up-to-date data
-4. If no tools are needed, respond with "use_tools": false and "tools": []
-5. Be conservative - only use tools when they add clear value
+4. For search_documents tool: use when user asks about specific information, documents, knowledge, or anything that might be stored in the knowledge base
+5. For create_document_embedding tool: use when user wants to add new information to the knowledge base
+6. If no tools are needed, respond with "use_tools": false and "tools": []
+7. Be conservative - only use tools when they add clear value
+
+RAG Search Guidelines:
+- Use search_documents when user asks about: system information, technical details, documentation, knowledge base content, stored information
+- Use search_documents when user asks: "what is", "how does", "tell me about", "explain", "describe"
+- Use search_documents when user asks about specific topics that might be in the knowledge base
 
 Respond with ONLY the JSON object, no other text:"""
 
@@ -388,6 +395,9 @@ def fallback_tool_selection(llm_response: str, available_tools: List[Dict[str, s
     
     if "web_search" in available_tool_names and any(word in response_lower for word in ["web_search", "search", "web search"]):
         selected_tools.append("web_search")
+    
+    if "search_documents" in available_tool_names and any(word in response_lower for word in ["search_documents", "rag", "knowledge", "document", "information", "what is", "how does", "tell me about", "explain", "describe"]):
+        selected_tools.append("search_documents")
     
     logger.info(f"Fallback tool selection: {selected_tools}")
     return selected_tools
@@ -464,6 +474,21 @@ def prepare_tool_input(tool_name: str, user_content: str) -> Dict[str, Any]:
             "query": user_content,
             "max_results": 5,
             "search_engine": "duckduckgo"
+        }
+    
+    elif tool_name == "search_documents":
+        # For RAG search tool, use the original user content as query
+        return {
+            "query": user_content,
+            "top_k": 5,
+            "similarity_threshold": 0.5
+        }
+    
+    elif tool_name == "create_document_embedding":
+        # For document embedding tool, use the original user content as text
+        return {
+            "text": user_content,
+            "metadata": {"source": "user_input", "timestamp": datetime.utcnow().isoformat()}
         }
     
     # Default case - pass the full user content

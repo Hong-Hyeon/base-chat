@@ -7,10 +7,13 @@ import httpx
 import asyncio
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException
 from app.utils.logger import get_logger
 
 logger = get_logger("rag_tool")
 
+# Create FastAPI router for RAG tools
+rag_router = APIRouter(prefix="/rag", tags=["rag-tools"])
 
 class RAGSearchRequest(BaseModel):
     """Request model for RAG search."""
@@ -126,7 +129,7 @@ class RAGTool:
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
-                    f"{self.embedding_server_url}/embed/",
+                    f"{self.embedding_server_url}/embed",
                     json={
                         "text": text,
                         "metadata": metadata or {}
@@ -174,7 +177,7 @@ class RAGTool:
             
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    f"{self.embedding_server_url}/batch/embed",
+                    f"{self.embedding_server_url}/embed/batch",
                     json={
                         "documents": documents
                     }
@@ -220,7 +223,7 @@ class RAGTool:
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.get(
-                    f"{self.embedding_server_url}/batch/status/{job_id}"
+                    f"{self.embedding_server_url}/embed/batch/{job_id}/status"
                 )
                 
                 if response.status_code == 200:
@@ -252,11 +255,81 @@ class RAGTool:
             }
 
 
+# Global RAG tool instance
+rag_tool = RAGTool()
+
+# FastAPI routes for RAG tools
+@rag_router.post("/search", response_model=RAGSearchResponse, operation_id="rag_search_tool")
+async def search_documents(request: RAGSearchRequest):
+    """Search for documents using semantic similarity."""
+    try:
+        result = await rag_tool.search_documents(
+            query=request.query,
+            top_k=request.top_k,
+            similarity_threshold=request.similarity_threshold
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return RAGSearchResponse(**result)
+        
+    except Exception as e:
+        logger.error(f"Error in search_documents: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@rag_router.post("/embed", operation_id="rag_create_embedding_tool")
+async def create_document_embedding(text: str, metadata: Optional[Dict[str, Any]] = None):
+    """Create an embedding for a text and store it in the vector database."""
+    try:
+        result = await rag_tool.create_embedding(text, metadata)
+        
+        if not result.get("success", False):
+            raise HTTPException(status_code=500, detail=result.get("error", "Unknown error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in create_document_embedding: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@rag_router.post("/batch", operation_id="rag_batch_create_embeddings_tool")
+async def batch_create_embeddings(documents: List[Dict[str, Any]]):
+    """Create embeddings for multiple documents in batch."""
+    try:
+        result = await rag_tool.batch_create_embeddings(documents)
+        
+        if not result.get("success", False):
+            raise HTTPException(status_code=500, detail=result.get("error", "Unknown error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in batch_create_embeddings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@rag_router.get("/batch/{job_id}/status", operation_id="rag_get_batch_status_tool")
+async def get_batch_job_status(job_id: str):
+    """Get status of a batch embedding job."""
+    try:
+        result = await rag_tool.get_batch_status(job_id)
+        
+        if not result.get("success", False):
+            raise HTTPException(status_code=500, detail=result.get("error", "Unknown error"))
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in get_batch_job_status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Tool registration for MCP
 def register_rag_tool(server):
     """Register RAG tool with MCP server."""
-    
-    rag_tool = RAGTool()
     
     # Define tool functions
     async def search_documents(query: str, top_k: int = 5, similarity_threshold: float = 0.5) -> Dict[str, Any]:
