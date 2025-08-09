@@ -128,3 +128,21 @@ async def search_embeddings(
     except Exception as e:
         logger.error(f"Error searching embeddings: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to search embeddings: {str(e)}")
+
+
+@router.delete("/document/{document_id}")
+async def delete_document(
+    document_id: str,
+    vector_svc: VectorStoreService = Depends(get_vector_store_service)
+):
+    """Delete a document by id from the active embedding table."""
+    try:
+        result = await vector_svc.delete_document(document_id)
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Delete failed"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting document {document_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")

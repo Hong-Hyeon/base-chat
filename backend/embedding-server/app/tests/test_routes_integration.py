@@ -10,6 +10,7 @@ async def test_embed_and_search_flow():
         assert r.status_code == 200
         data = r.json()
         assert "document_id" in data
+        doc_id = data["document_id"]
 
         # search with filter
         s = await client.post("/embed/search", json={
@@ -21,3 +22,7 @@ async def test_embed_and_search_flow():
         assert s.status_code == 200
         sdata = s.json()
         assert isinstance(sdata.get("results", []), list)
+
+        # delete the document and ensure it no longer appears
+        d = await client.delete(f"/embed/document/{doc_id}")
+        assert d.status_code == 200

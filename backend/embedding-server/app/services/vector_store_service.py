@@ -388,6 +388,26 @@ class VectorStoreService:
             
         return True
 
+    async def delete_document(self, document_id: str) -> Dict[str, Any]:
+        """Delete a document by document_id from the current active table."""
+        try:
+            pool = await self._get_pool()
+            async with pool.acquire() as conn:
+                result = await conn.execute(
+                    f"""
+                    DELETE FROM {self.current_table}
+                    WHERE document_id = $1
+                    """,
+                    document_id,
+                )
+                # asyncpg returns string like 'DELETE <count>'
+                deleted_count = int(result.split()[-1]) if isinstance(result, str) else 0
+                self.logger.info(f"Deleted {deleted_count} documents for id {document_id} from {self.current_table}")
+                return {"success": True, "deleted_count": deleted_count}
+        except Exception as e:
+            self.logger.error(f"Error deleting document {document_id}: {str(e)}")
+            return {"success": False, "error": str(e)}
+
     async def create_embedding_table(self, table_name: str, description: Optional[str] = None) -> Dict[str, Any]:
         """Create a new embedding table with the specified name."""
         try:
