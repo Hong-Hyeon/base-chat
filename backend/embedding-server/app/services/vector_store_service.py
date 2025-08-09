@@ -14,6 +14,7 @@ class VectorStoreService:
         self.logger = get_logger("vector_store_service")
         self.db_url = settings.embedding_database_url
         self.pool = None
+        self.current_table = 'embeddings'
 
     async def _get_pool(self):
         """Get database connection pool."""
@@ -100,6 +101,26 @@ class VectorStoreService:
                     ON CONFLICT (table_name) DO NOTHING
                 """, str(uuid.uuid4()), "embeddings", "Default embeddings table")
 
+                # Track active table in a dedicated singleton table
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS active_table (
+                        id SMALLINT PRIMARY KEY DEFAULT 1,
+                        table_name VARCHAR(255) NOT NULL,
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    )
+                """)
+                await conn.execute(
+                    """
+                    INSERT INTO active_table (id, table_name)
+                    VALUES (1, 'embeddings')
+                    ON CONFLICT (id) DO NOTHING
+                    """
+                )
+
+                active = await conn.fetchval("SELECT table_name FROM active_table WHERE id = 1")
+                if active:
+                    self.current_table = active
+
                 self.logger.info("Database initialized successfully with optimized indexes and table metadata")
 
         except Exception as e:
@@ -123,8 +144,9 @@ class VectorStoreService:
                 # Convert embedding list to string for pgvector
                 embedding_str = f"[{','.join(map(str, embedding))}]"
                 
-                await conn.execute("""
-                    INSERT INTO embeddings (document_id, content, embedding, metadata)
+                await conn.execute(
+                    f"""
+                    INSERT INTO {self.current_table} (document_id, content, embedding, metadata)
                     VALUES ($1, $2, $3::vector, $4::jsonb)
                     ON CONFLICT (document_id)
                     DO UPDATE SET
@@ -132,7 +154,9 @@ class VectorStoreService:
                         embedding = $3::vector,
                         metadata = $4::jsonb,
                         updated_at = NOW()
-                """, document_id, content, embedding_str, metadata_json)
+                    """,
+                    document_id, content, embedding_str, metadata_json
+                )
 
                 self.logger.info(f"Embedding stored for document: {document_id}")
                 return True
@@ -175,7 +199,7 @@ class VectorStoreService:
                         content,
                         metadata,
                         1 - (embedding <=> $1::vector) as similarity_score
-                    FROM embeddings
+                    FROM {self.current_table}
                     WHERE 1 - (embedding <=> $1::vector) > $2{filter_sql}
                     ORDER BY embedding <=> $1::vector
                     LIMIT $3
@@ -226,8 +250,9 @@ class VectorStoreService:
                         metadata_json = json.dumps(metadata) if metadata is not None else None
                         embedding_str = f"[{','.join(map(str, embedding))}]"
                         
-                        await conn.execute("""
-                            INSERT INTO embeddings (document_id, content, embedding, metadata)
+                        await conn.execute(
+                            f"""
+                            INSERT INTO {self.current_table} (document_id, content, embedding, metadata)
                             VALUES ($1, $2, $3::vector, $4::jsonb)
                             ON CONFLICT (document_id)
                             DO UPDATE SET
@@ -235,7 +260,9 @@ class VectorStoreService:
                                 embedding = $3::vector,
                                 metadata = $4::jsonb,
                                 updated_at = NOW()
-                        """, document_id, content, embedding_str, metadata_json)
+                            """,
+                            document_id, content, embedding_str, metadata_json
+                        )
 
                 self.logger.info(f"Batch stored {len(embeddings_data)} embeddings")
                 return {"success": True, "count": len(embeddings_data)}
@@ -250,26 +277,26 @@ class VectorStoreService:
             pool = await self._get_pool()
             async with pool.acquire() as conn:
                 # Get total count
-                total_count = await conn.fetchval("SELECT COUNT(*) FROM embeddings")
+                total_count = await conn.fetchval(f"SELECT COUNT(*) FROM {self.current_table}")
                 
                 # Get average embedding dimension (using vector_dims function for pgvector)
-                avg_dimension = await conn.fetchval("""
+                avg_dimension = await conn.fetchval(f"""
                     SELECT AVG(vector_dims(embedding)) 
-                    FROM embeddings 
+                    FROM {self.current_table} 
                     WHERE embedding IS NOT NULL
                 """)
                 
                 # Get metadata statistics
-                metadata_stats = await conn.fetchval("""
+                metadata_stats = await conn.fetchval(f"""
                     SELECT COUNT(*) 
-                    FROM embeddings 
-                    WHERE metadata IS NOT NULL AND metadata != '{}'::jsonb
+                    FROM {self.current_table} 
+                    WHERE metadata IS NOT NULL AND metadata != '{{}}'::jsonb
                 """)
                 
                 # Get recent activity
-                recent_count = await conn.fetchval("""
+                recent_count = await conn.fetchval(f"""
                     SELECT COUNT(*) 
-                    FROM embeddings 
+                    FROM {self.current_table} 
                     WHERE created_at > NOW() - INTERVAL '24 hours'
                 """)
 
@@ -289,10 +316,13 @@ class VectorStoreService:
         try:
             pool = await self._get_pool()
             async with pool.acquire() as conn:
-                result = await conn.execute("""
-                    DELETE FROM embeddings 
-                    WHERE created_at < NOW() - INTERVAL '$1 days'
-                """, days_old)
+                result = await conn.execute(
+                    f"""
+                    DELETE FROM {self.current_table}
+                    WHERE created_at < NOW() - ($1 || ' days')::interval
+                    """,
+                    days_old,
+                )
                 
                 deleted_count = int(result.split()[-1])
                 self.logger.info(f"Cleaned up {deleted_count} old embeddings")
@@ -315,7 +345,7 @@ class VectorStoreService:
                 stats = await self.get_statistics()
                 
                 # Check index usage
-                index_info = await conn.fetch("""
+                index_info = await conn.fetch(f"""
                     SELECT 
                         schemaname,
                         tablename,
@@ -324,7 +354,7 @@ class VectorStoreService:
                         idx_tup_read,
                         idx_tup_fetch
                     FROM pg_stat_user_indexes 
-                    WHERE tablename = 'embeddings'
+                    WHERE tablename = '{self.current_table}'
                 """)
 
                 return {
@@ -550,8 +580,16 @@ class VectorStoreService:
                 # Store current active table
                 current_table = getattr(self, 'current_table', 'embeddings')
                 
-                # Switch to new table
+                # Switch to new table and persist
                 self.current_table = table_name
+                await conn.execute(
+                    """
+                    UPDATE active_table
+                    SET table_name = $1, updated_at = NOW()
+                    WHERE id = 1
+                    """,
+                    table_name,
+                )
                 
                 self.logger.info(f"Switched to embedding table: {table_name}")
                 

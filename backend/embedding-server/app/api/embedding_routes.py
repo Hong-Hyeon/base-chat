@@ -71,6 +71,7 @@ async def create_embedding(
         logger.info(f"Embedding created successfully in {processing_time:.3f}s")
         
         return EmbeddingResponse(
+            document_id=document_id,
             embedding=embedding,
             model=embedding_svc.model,
             text=request.text,
@@ -99,7 +100,8 @@ async def search_embeddings(
         search_results = await vector_svc.search_similar(
             query_embedding=query_embedding,
             top_k=request.top_k,
-            similarity_threshold=request.similarity_threshold
+            similarity_threshold=request.similarity_threshold,
+            filters=request.filters
         )
         
         # Convert to response format

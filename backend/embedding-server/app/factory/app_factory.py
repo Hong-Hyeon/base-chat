@@ -105,6 +105,10 @@ class AppFactory:
             log_request_info(self.logger, request.method, request.url.path, response.status_code, duration)
             
             return response
+
+        # Register Prometheus metrics middleware
+        from app.monitoring.prometheus_metrics import MetricsMiddleware
+        app.middleware('http')(MetricsMiddleware())
     
     def create_exception_handlers(self, app: FastAPI):
         """Add exception handlers to the FastAPI application."""
@@ -158,7 +162,7 @@ class AppFactory:
                 try:
                     from app.celery_app import celery_app
                     celery_health = "healthy" if celery_app.control.inspect().active() else "unhealthy"
-                except:
+                except Exception:
                     celery_health = "unhealthy"
                 
                 return {

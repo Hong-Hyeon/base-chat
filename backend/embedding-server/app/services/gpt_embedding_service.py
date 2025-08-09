@@ -1,4 +1,4 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
 from app.utils.logger import get_logger
@@ -13,7 +13,7 @@ class GPTEmbeddingService:
         
         # Configure OpenAI client
         if settings.openai_api_key:
-            self.client = OpenAI(
+            self.client = AsyncOpenAI(
                 api_key=settings.openai_api_key,
                 base_url=settings.openai_base_url
             )
@@ -29,12 +29,12 @@ class GPTEmbeddingService:
                 
             self.logger.info(f"Creating embedding for text: {text[:50]}...")
             
-            response = self.client.embeddings.create(
+            response = await self.client.embeddings.create(
                 model=self.model,
                 input=text
             )
-            
-            embedding = response.data[0].embedding
+
+            embedding = response.data[0].embedding  # type: ignore[attr-defined]
             self.logger.info(f"Embedding created successfully, dimension: {len(embedding)}")
             
             return embedding

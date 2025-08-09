@@ -1,0 +1,61 @@
+name: Backend CI
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+  pull_request:
+    paths:
+      - 'backend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create network
+        run: docker network create basechat_network || true
+
+      - name: Start system services
+        working-directory: backend/..
+        run: |
+          cd system-docker
+          docker compose up -d
+
+      - name: Build backend stack
+        working-directory: backend
+        run: docker compose build
+
+      - name: Start backend (without frontend)
+        working-directory: backend
+        run: |
+          docker compose up -d main-backend llm-agent-openai mcp-server embedding-server celery-worker celery-beat
+
+      - name: Wait for services to be healthy
+        run: |
+          for i in {1..30}; do
+            ok=0
+            curl -fsS http://localhost:8000/health && ok=$((ok+1)) || true
+            curl -fsS http://localhost:8001/health && ok=$((ok+1)) || true
+            curl -fsS http://localhost:8002/health && ok=$((ok+1)) || true
+            curl -fsS http://localhost:8003/health && ok=$((ok+1)) || true
+            if [ "$ok" -ge 3 ]; then echo "Services are up"; break; fi
+            sleep 3
+          done
+
+      - name: Run embedding-server tests
+        run: docker exec backend-embedding-server-1 python -m pytest -q /app/app/tests -q
+
+      - name: Run main-backend tests
+        run: docker exec backend-main-backend-1 python -m pytest -q /app/app/tests -q
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose -f backend/docker-compose.yml down -v || true
+          docker compose -f system-docker/docker-compose.yml down -v || true

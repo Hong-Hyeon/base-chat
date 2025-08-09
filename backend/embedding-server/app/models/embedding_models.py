@@ -11,6 +11,7 @@ class EmbeddingRequest(BaseModel):
 
 class EmbeddingResponse(BaseModel):
     """Response model for embedding creation."""
+    document_id: str = Field(..., description="Stored document ID")
     embedding: List[float] = Field(..., description="Generated embedding vector")
     model: str = Field(..., description="Model used for embedding")
     text: str = Field(..., description="Original text")
